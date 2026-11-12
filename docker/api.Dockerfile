@@ -58,8 +58,9 @@ RUN find /app/yuxi -type d -exec chmod 0755 {} + \
     && find /app/yuxi -type f -exec chmod 0644 {} +
 
 # 如果网络还是不好，可以在后面添加 --index-url https://pypi.tuna.tsinghua.edu.cn/simple
-RUN uv sync --no-cache --group test --no-dev --frozen
-
+RUN uv sync --no-cache --group test --no-dev --frozen \
+    --index-url https://pypi.mirrors.ustc.edu.cn/simple/
+    
 COPY --chown=0:0 --chmod=0755 docker/api-entrypoint.sh /usr/local/bin/yuxi-entrypoint
 
 # RapidOCR 使用 rapidocr wheel 自带的 PP-OCRv6 模型；不预置时首次解析会联网到
