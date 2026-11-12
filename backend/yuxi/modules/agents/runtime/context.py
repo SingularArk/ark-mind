@@ -197,6 +197,11 @@ class BaseContext:
 
     agent_slug: str | None = field(default=None, metadata={"configurable": False, "hide": True})
 
+    tool_approval_mode: str = field(
+        default=DEFAULT_TOOL_APPROVAL_MODE,
+        metadata={"name": "工具审批模式", "configurable": False, "hide": True},
+    )
+
     skill_runtime_snapshot: SkillRuntimeSnapshot | None = field(default=None, repr=False, metadata={"configurable": False, "hide": True})
     mcp_tool_servers: dict[str, str] | None = field(default=None, repr=False, metadata={"configurable": False, "hide": True})
     registered_builtin_tool_names: set[str] | None = field(default=None, repr=False, metadata={"configurable": False, "hide": True})
@@ -225,21 +230,6 @@ class BaseContext:
         },
     )
 
-    tool_approval_mode: str = field(
-        default=DEFAULT_TOOL_APPROVAL_MODE,
-        metadata={
-            "name": "工具审批模式",
-            "hide": True,
-            "description": "默认审批会在写文件、编辑文件或执行命令前询问；完全信任会自动执行这些工具。",
-            "options": [
-                {"key": "default", "name": "默认审批", "description": "敏感工具执行前请求确认"},
-                {"key": "always_trust", "name": "完全信任", "description": "敏感工具无需确认，自动执行"},
-            ],
-            "type": "string",
-            "auth": "admin",
-        },
-    )
-
     tools: ResourceSelection = field(
         default="all",
         metadata={
@@ -263,9 +253,9 @@ class BaseContext:
     mcps: ResourceSelection = field(
         default_factory=list,
         metadata={
-            "name": "MCP服务器",
+            "name": "连接器",
             "options": [],
-            "description": "选择智能体直接使用的 MCP 服务，默认不直接加载；Skill 的依赖在激活时加载。",
+            "description": "选择智能体直接使用的连接器，默认不直接加载；Skill 的依赖在激活时加载。",
             "type": "list",
             "kind": "mcps",
         },
@@ -276,7 +266,7 @@ class BaseContext:
         metadata={
             "name": "Skills",
             "options": [],
-            "description": ("选择共享和内置 Skill；个人 Skill 始终可用。本地工具和 MCP 依赖在激活后开放，预加载从首轮开放。"),
+            "description": ("选择共享和内置 Skill；个人 Skill 始终可用。本地工具和连接器依赖在激活后开放，预加载从首轮开放。"),
             "type": "list",
             "kind": "skills",
         },

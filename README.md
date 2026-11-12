@@ -25,12 +25,9 @@ Yuxi 是面向需要企业自部署的多用户 Agent 产品，且需要自己�
 - **管理团队使用范围**：按用户、部门和共享范围管理知识库、智能体、Skills 和模型。
 - **对比运行质量**：评估知识库的检索结果；完整智能体评估可通过公开 API 自行构建，见[智能体评估](docs/agents/agent-evaluation.md)。
 
+## 系统架构
 
-## 赞助商
-
-| 赞助商 | 介绍 |
-| :---: | :--- |
-| <img src="https://oss-img.xerrors.cn/github/%E4%B8%8B%E8%BD%BD.jpeg" alt="Fluxion AI LOGO" width="180" /> | Fluxion AI面向个人开发者、技术团队与企业，通过统一API接入并管理全球主流AI模型；通过多线路动态调度提升可用性，模型表现、响应时间与费用透明可查。根据不同模型与线路，API调用成本较官方或基准价格可降低40%—98%。专属链接[注册](https://fluxionai.space/register?source=github&campaign=yuxi&promo=YUXI) 获 $7 API 额度 |
+![Yuxi 系统架构图](https://oss-img.xerrors.cn/github/yuxi-architecture-20261112-f3046585a.png)
 
 ## 快速启动
 
@@ -40,14 +37,14 @@ Yuxi 是面向需要企业自部署的多用户 Agent 产品，且需要自己�
 
 安装 Git、[Docker Engine](https://docs.docker.com/get-docker/) 和 Docker Compose v2，准备一个可用的大模型 API。macOS/Windows 使用 Docker Desktop 的 Linux 容器模式，并允许项目目录共享。
 
-本教程使用 `v0.8.0.beta7` 测试版本。0.8 仅面向全新部署，旧数据库、索引和文件布局不提供自动升级；请用独立数据目录试用，见[0.8.0 更新说明](docs/develop-guides/releases/0.8.0.md)。
+本教程使用 `v0.8.0`。0.8 仅面向全新部署，旧数据库、索引和文件布局不提供自动升级；请用独立数据目录，见[0.8.0 更新说明](docs/develop-guides/releases/0.8.0.md)。
 
 Container 适合本地试用和单租户可信代码，共享宿主内核。需要 VM 隔离或持久用户环境时，在[快速开始](docs/intro/quick-start.md)选择 Cube 并准备 Linux/KVM 执行节点。
 
 ### 1. 获取代码并初始化
 
 ```bash
-git clone --branch v0.8.0.beta7 --depth 1 https://github.com/xerrors/Yuxi.git
+git clone --branch v0.8.0 --depth 1 https://github.com/xerrors/Yuxi.git
 cd Yuxi
 ./scripts/init.sh
 ```

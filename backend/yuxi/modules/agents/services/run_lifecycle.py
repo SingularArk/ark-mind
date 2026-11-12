@@ -332,7 +332,7 @@ async def _consume_steer(*, db: AsyncSession, agent_session: Session, turn: Agen
     if not batch or batch[0].id != pending.id or batch[0].kind != "steer":
         raise ValueError("Steer 队头已变化或尚未就绪")
     run = await create_turn_run(
-        db=db, agent_session=agent_session, turn=turn, source=pending, previous=previous, api_key_id=pending.api_key_id
+        db=db, agent_session=agent_session, turn=turn, source=pending, previous=previous, api_key_id=pending.api_key_id, input_batch=batch
     )
     run_id = run.id
     messages = await input_repo.consume(inputs=batch, turn_id=turn.id, run_id=run_id)
@@ -365,6 +365,7 @@ async def _clear_waitpoint_checkpoint(run: AgentRun) -> None:
     context.update_config(run.input_payload["context_snapshot"])
     context.update(
         {
+            "tool_approval_mode": run.input_payload["context_snapshot"]["tool_approval_mode"],
             "thread_id": run.thread_id,
             "uid": run.uid,
             "run_id": run.id,

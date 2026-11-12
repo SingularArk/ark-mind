@@ -27,7 +27,7 @@ class BaseEmbeddingModel(ABC):
     ):
         """接收供应商已解析的执行配置。"""
         self.model = model
-        self.dimension = dimension
+        self.dimension = int(dimension) if dimension not in (None, "") else None
         self.base_url = get_docker_safe_url(base_url)
         self.api_key = api_key
         self.batch_size = int(batch_size or 40)
@@ -48,6 +48,7 @@ class BaseEmbeddingModel(ABC):
             group_msg = messages[i : i + batch_size]
             logger.info(f"Encoding [{i}/{len(messages)}] messages (bsz={batch_size})")
             response = self.encode(group_msg)
+            self._require_one_vector_per_input(response, len(group_msg), self.dimension)
             data.extend(response)
 
         return data
@@ -60,6 +61,7 @@ class BaseEmbeddingModel(ABC):
             group_msg = messages[i : i + batch_size]
             logger.info(f"Async encoding [{i}/{len(messages)}] messages (bsz={batch_size})")
             res = await self.aencode(group_msg)
+            self._require_one_vector_per_input(res, len(group_msg), self.dimension)
             data.extend(res)
 
         return data
@@ -78,6 +80,56 @@ class BaseEmbeddingModel(ABC):
             error_msg += f", maybe you can check the `{self.base_url}` end with /embeddings as examples."
             logger.error(error_msg)
             return False, error_msg
+
+    @staticmethod
+    def _extract_embeddings(result: dict, expected: int | None = None, dimension: int | None = None) -> list[list[float]]:
+        """只接受逐条对应且维度一致的向量；提供者带 index 时按 index 归位，否则保持响应顺序。"""
+        if not isinstance(result, dict) or "data" not in result:
+            raise ValueError(f"Embedding failed: Invalid response format {result}")
+
+        items = result["data"]
+        if not isinstance(items, list):
+            raise ValueError("Embedding response data must be a list")
+        if expected is not None:
+            BaseEmbeddingModel._require_one_vector_per_input(items, expected)
+
+        for item in items:
+            if not isinstance(item, dict) or item.get("embedding") is None:
+                raise ValueError("Embedding response contains an invalid item")
+            if dimension is not None and len(item["embedding"]) != dimension:
+                raise ValueError(
+                    f"Embedding response returned a vector of dimension {len(item['embedding'])}"
+                    f" for a model configured with dimension {dimension}"
+                )
+
+        if not any(item.get("index") is not None for item in items):
+            return [item["embedding"] for item in items]
+
+        indexed = {}
+        for item in items:
+            index = item.get("index")
+            if index is None:
+                raise ValueError("Embedding response mixes indexed and unindexed items")
+            if type(index) is not int or not 0 <= index < len(items):
+                raise ValueError("Embedding response contains an out-of-range index")
+            if index in indexed:
+                raise ValueError("Embedding response contains a duplicate index")
+            indexed[index] = item["embedding"]
+
+        return [indexed[index] for index in range(len(items))]
+
+    @staticmethod
+    def _require_one_vector_per_input(embeddings: list, expected: int, dimension: int | None = None) -> None:
+        """校验响应或批次条数与维度，拒绝部分结果和维度不符的批次。"""
+        if len(embeddings) != expected:
+            raise ValueError(f"Embedding response returned {len(embeddings)} vectors for {expected} inputs")
+        if dimension is not None:
+            for embedding in embeddings:
+                if len(embedding) != dimension:
+                    raise ValueError(
+                        f"Embedding response returned a vector of dimension {len(embedding)}"
+                        f" for a model configured with dimension {dimension}"
+                    )
 
 
 class OtherEmbedding(BaseEmbeddingModel):
@@ -99,7 +151,11 @@ class OtherEmbedding(BaseEmbeddingModel):
             try:
                 response = requests.post(self.base_url, json=payload, headers=self.headers, timeout=60)
                 response.raise_for_status()
-                return self._extract_embeddings(response.json())
+                return self._extract_embeddings(
+                    response.json(),
+                    1 if isinstance(message, str) else len(message),
+                    self.dimension,
+                )
             except requests.RequestException as e:
                 retry = self._prepare_retry(
                     message,
@@ -112,7 +168,8 @@ class OtherEmbedding(BaseEmbeddingModel):
                     time.sleep(delay)
                     continue
 
-                logger.error(f"Embedding request failed: {e}, {payload}")
+                status_code = getattr(getattr(e, "response", None), "status_code", None)
+                logger.error("Embedding request failed: {} status={}", type(e).__name__, status_code)
                 raise ValueError(f"Embedding request failed: {e}")
 
     async def aencode(self, message: list[str] | str) -> list[list[float]]:
@@ -125,7 +182,11 @@ class OtherEmbedding(BaseEmbeddingModel):
                 try:
                     response = await client.post(self.base_url, json=payload, headers=self.headers, timeout=60)
                     response.raise_for_status()
-                    return self._extract_embeddings(response.json())
+                    return self._extract_embeddings(
+                        response.json(),
+                        1 if isinstance(message, str) else len(message),
+                        self.dimension,
+                    )
                 except httpx.HTTPStatusError as e:
                     retry = self._prepare_retry(
                         message,
@@ -144,7 +205,8 @@ class OtherEmbedding(BaseEmbeddingModel):
                         retry_index, delay = retry
                         await asyncio.sleep(delay)
                         continue
-                    raise ValueError(f"Embedding async request failed: {e}, {payload}, {self.base_url=}")
+                    status_code = getattr(getattr(e, "response", None), "status_code", None)
+                    raise ValueError(f"Embedding async request failed: {type(e).__name__} status={status_code}")
 
     @staticmethod
     def _retry_delay_seconds(retry_index: int, retry_after: str | None = None) -> float:
@@ -194,12 +256,6 @@ class OtherEmbedding(BaseEmbeddingModel):
             f"input_count={len(messages)}, body={response_text[:1000]}"
         )
         return next_retry_index, delay
-
-    @staticmethod
-    def _extract_embeddings(result: dict) -> list[list[float]]:
-        if not isinstance(result, dict) or "data" not in result:
-            raise ValueError(f"Embedding failed: Invalid response format {result}")
-        return [item["embedding"] for item in result["data"]]
 
     @staticmethod
     def _log_long_inputs(message: list[str] | str, threshold: int = 4000) -> None:

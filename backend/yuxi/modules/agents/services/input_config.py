@@ -7,6 +7,7 @@ from dataclasses import fields
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from yuxi.modules.agents.runtime.context import ResourceSelection
 from yuxi.modules.agents.runtime.tool_approval import DEFAULT_TOOL_APPROVAL_MODE, normalize_tool_approval_mode
 from yuxi.modules.models.providers.cache import model_cache
 from yuxi.modules.system.options import system_options
@@ -24,8 +25,9 @@ async def resolve_agent_context_snapshot(
     context = agent_backend.context_schema()
     context.update_config((agent_item.config_json or {}).get("context") or {})
     context.model = await resolve_agent_run_model_spec(model_spec, context.model, db)
-    context.tool_approval_mode = resolve_agent_run_tool_approval_mode(tool_approval_mode, context.tool_approval_mode)
-    return {item.name: deepcopy(getattr(context, item.name)) for item in fields(context) if item.metadata.get("configurable", True)}
+    snapshot = {item.name: deepcopy(getattr(context, item.name)) for item in fields(context) if item.metadata.get("configurable", True)}
+    snapshot["tool_approval_mode"] = resolve_agent_run_tool_approval_mode(tool_approval_mode)
+    return snapshot
 
 
 async def resolve_agent_run_model_spec(requested_model: str | None, configured_model: str | None, db: AsyncSession | None = None) -> str:
@@ -44,10 +46,20 @@ async def resolve_agent_run_model_spec(requested_model: str | None, configured_m
     return model_spec
 
 
-def resolve_agent_run_tool_approval_mode(requested_mode: str | None, configured_mode: str | None) -> str:
-    """解析当前执行段的工具审批模式。"""
-    source = requested_mode if requested_mode is not None else configured_mode or DEFAULT_TOOL_APPROVAL_MODE
+def resolve_agent_run_tool_approval_mode(requested_mode: str | None) -> str:
+    """解析会话或单次输入选择的审批模式，省略时使用默认审批。"""
+    source = requested_mode if requested_mode is not None else DEFAULT_TOOL_APPROVAL_MODE
     try:
         return normalize_tool_approval_mode(source)
     except ValueError as exc:
         raise InvalidInputError(str(exc)) from exc
+
+
+def merge_mcp_selections(*selections: ResourceSelection) -> ResourceSelection:
+    """合并会话连接器选择，保序去重并保留 all 的动态语义。"""
+    merged = []
+    for selection in selections:
+        if selection == "all":
+            return "all"
+        merged.extend(selection)
+    return list(dict.fromkeys(merged))
